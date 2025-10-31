@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-sentry-logger-wrapper"
+version = "0.1.0"
+description = "Standardized structured (JSON) logging package with Sentry integration."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Logging",
+]
+dependencies = [
+    "structlog>=23.0.0",
+    "sentry-sdk[fastapi]>=2.35.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/HEAL-Engineering/python-sentry-logger-wrapper"
+Issues = "https://github.com/HEAL-Engineering/python-sentry-logger-wrapper/issues"
