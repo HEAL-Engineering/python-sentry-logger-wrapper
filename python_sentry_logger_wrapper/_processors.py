@@ -1,4 +1,4 @@
-"""Custom processors for heal-logger to shape logs into the standard schema."""
+"""Custom processors for python-sentry-logger-wrapper to shape logs into the standard schema."""
 from typing import Any, Dict, Optional
 from structlog.types import EventDict, WrappedLogger
 import sentry_sdk
@@ -36,9 +36,6 @@ def rename_and_flatten_fields(
     """
     if "event" in event_dict:
         event_dict["message"] = event_dict.pop("event")
-
-    if "logger_name" in event_dict:
-        event_dict["logger_name"] = event_dict.pop("logger_name")
         
     if "level" in event_dict:
         event_dict["log_level"] = event_dict.pop("level").upper()

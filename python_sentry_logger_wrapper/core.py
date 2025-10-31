@@ -1,4 +1,4 @@
-"""Core functionality for the heal-logger package."""
+"""Core functionality for the python-sentry-logger-wrapper package."""
 import logging
 import sys
 from typing import Optional
