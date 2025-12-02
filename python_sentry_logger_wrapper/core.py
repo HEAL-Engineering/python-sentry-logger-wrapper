@@ -181,7 +181,6 @@ def get_logger(
                 dsn=sentry_dsn,
                 environment=sentry_environment,
                 traces_sample_rate=sentry_sample_rate,
-                enable_tracing=True,
                 enable_logs=True,
                 before_send=before_send,
                 before_send_log=before_send_log,
@@ -201,7 +200,6 @@ def get_logger(
                 environment=sentry_environment,
                 default_integrations=False,
                 traces_sample_rate=0.0,
-                enable_tracing=False,
             )
             
 
