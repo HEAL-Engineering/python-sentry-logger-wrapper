@@ -160,13 +160,14 @@ logger = get_logger(
 For AWS Lambda functions, enable the Lambda integration for automatic timeout warnings and Lambda-specific context:
 
 ```python
+from typing import Optional
 from pydantic_settings import BaseSettings
 from python_sentry_logger_wrapper import get_logger
 
 class Settings(BaseSettings):
     """Lambda configuration using Pydantic BaseSettings."""
     service_name: str = "my-lambda"
-    sentry_dsn: str | None = None
+    sentry_dsn: Optional[str] = None
     environment: str = "unknown"
 
     class Config:

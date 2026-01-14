@@ -1,7 +1,7 @@
 """Core functionality for the python-sentry-logger-wrapper package."""
 import logging
 import sys
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import structlog
 from structlog.stdlib import BoundLogger
@@ -9,6 +9,10 @@ import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 
 from ._processors import nest_custom_fields, rename_and_flatten_fields, remove_processors_meta_safe, add_sentry_trace_id
+
+# Type hint for static analysis - import is conditional at runtime
+if TYPE_CHECKING:
+    from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
 
 # Optional Lambda integration - requires 'lambda' extra: uv add "python-sentry-logger-wrapper[lambda]"
 try:
