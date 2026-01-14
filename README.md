@@ -21,6 +21,9 @@ Standardized structured (JSON) logging package with built-in Sentry integration 
 # Install from GitHub using uv
 uv add git+https://github.com/HEAL-Engineering/python-sentry-logger-wrapper.git
 
+# With Lambda support (for AWS Lambda functions)
+uv add "python-sentry-logger-wrapper[lambda] @ git+https://github.com/HEAL-Engineering/python-sentry-logger-wrapper.git"
+
 # Or using pip
 pip install git+https://github.com/HEAL-Engineering/python-sentry-logger-wrapper.git
 ```
@@ -151,6 +154,45 @@ logger = get_logger(
 - **INFO/WARNING logs** - Sent as breadcrumbs (attached to errors for context)
 - **All custom fields** - Searchable in Sentry UI (e.g., `details.user_id:123`)
 - **Request context** - Automatic with FastAPI (URL, method, headers, duration)
+
+## AWS Lambda Usage
+
+For AWS Lambda functions, enable the Lambda integration for automatic timeout warnings and Lambda-specific context:
+
+```python
+from pydantic_settings import BaseSettings
+from python_sentry_logger_wrapper import get_logger
+
+class Settings(BaseSettings):
+    """Lambda configuration using Pydantic BaseSettings."""
+    service_name: str = "my-lambda"
+    sentry_dsn: str | None = None
+    environment: str = "unknown"
+
+    class Config:
+        env_prefix = ""  # or use a prefix like "LAMBDA_"
+
+settings = Settings()
+
+logger = get_logger(
+    service_name=settings.service_name,
+    sentry_dsn=settings.sentry_dsn,
+    sentry_environment=settings.environment,
+    lambda_integration=True,       # Enables AwsLambdaIntegration
+    lambda_timeout_warning=True,   # Warn before Lambda timeout (default: True)
+)
+
+def lambda_handler(event, context):
+    logger.info("Processing event", event_type=event.get("triggerSource"))
+    # Your Lambda logic here
+    return {"statusCode": 200}
+```
+
+**What happens automatically:**
+
+- Lambda context (function name, memory, request ID) added to logs
+- Timeout warnings before Lambda times out
+- Errors captured with full Lambda context
 
 ## Advanced Usage
 
