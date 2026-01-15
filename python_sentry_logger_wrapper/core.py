@@ -1,7 +1,7 @@
 """Core functionality for the python-sentry-logger-wrapper package."""
 import logging
 import sys
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import structlog
 from structlog.stdlib import BoundLogger
@@ -9,6 +9,17 @@ import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 
 from ._processors import nest_custom_fields, rename_and_flatten_fields, remove_processors_meta_safe, add_sentry_trace_id
+
+# Type hint for static analysis - import is conditional at runtime
+if TYPE_CHECKING:
+    from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
+
+# Optional Lambda integration - requires 'lambda' extra: uv add "python-sentry-logger-wrapper[lambda]"
+try:
+    from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
+    HAS_LAMBDA_INTEGRATION = True
+except ImportError:
+    HAS_LAMBDA_INTEGRATION = False
 
 _is_configured = False
 
@@ -21,7 +32,9 @@ def get_logger(
     sentry_log_level: int = logging.ERROR,
     sentry_environment: Optional[str] = None,
     sentry_sample_rate: float = 1.0,
-    sentry_send_pii: bool = False
+    sentry_send_pii: bool = False,
+    lambda_integration: bool = False,
+    lambda_timeout_warning: bool = True,
 ) -> BoundLogger:
     """
     Configures and returns a standard logger with optional Sentry integration.
@@ -40,6 +53,10 @@ def get_logger(
         sentry_environment: Optional environment name for Sentry (e.g., "production", "staging").
         sentry_sample_rate: Sample rate for Sentry traces (0.0 to 1.0, default 1.0).
         sentry_send_pii: Whether to send PII (user IPs, cookies, headers) to Sentry (default False).
+        lambda_integration: Enable AWS Lambda integration for Sentry (default False).
+            Requires the 'lambda' extra: uv add "python-sentry-logger-wrapper[lambda]"
+        lambda_timeout_warning: When lambda_integration=True, whether to warn about
+            Lambda timeouts (default True).
 
     Note:
         Health check filtering: In production/test environments, all /health endpoint
@@ -177,6 +194,25 @@ def get_logger(
                         return None
                 return event
 
+            # Build integrations list
+            # Note: Sentry deduplicates by integration type, so our custom LoggingIntegration
+            # replaces the default one rather than causing duplicate logs
+            integrations = [
+                LoggingIntegration(
+                    level=sentry_breadcrumbs_level,
+                    event_level=sentry_log_level,
+                ),
+            ]
+
+            # Add Lambda integration if requested and available
+            if lambda_integration:
+                if not HAS_LAMBDA_INTEGRATION:
+                    raise ImportError(
+                        "Lambda integration requires the 'lambda' extra. "
+                        "Install with: uv add 'python-sentry-logger-wrapper[lambda]'"
+                    )
+                integrations.append(AwsLambdaIntegration(timeout_warning=lambda_timeout_warning))
+
             sentry_sdk.init(
                 dsn=sentry_dsn,
                 environment=sentry_environment,
@@ -187,12 +223,7 @@ def get_logger(
                 before_send_transaction=before_send_transaction,
                 before_breadcrumb=before_breadcrumb,
                 send_default_pii=sentry_send_pii,
-                integrations=[
-                    LoggingIntegration(
-                        level=sentry_breadcrumbs_level,
-                        event_level=sentry_log_level,
-                    ),
-                ],
+                integrations=integrations,
             )
         elif sentry_dsn:
             sentry_sdk.init(

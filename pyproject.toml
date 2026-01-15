@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-sentry-logger-wrapper"
-version = "0.1.0"
+version = "0.2.0"
 description = "Standardized structured (JSON) logging package with Sentry integration."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -27,6 +27,9 @@ dependencies = [
     "structlog>=23.0.0",
     "sentry-sdk[fastapi]>=2.46.0",
 ]
+
+[project.optional-dependencies]
+lambda = ["sentry-sdk[aws-lambda]>=2.49.0"]
 
 [project.urls]
 Homepage = "https://github.com/HEAL-Engineering/python-sentry-logger-wrapper"
