@@ -195,6 +195,8 @@ def get_logger(
                 return event
 
             # Build integrations list
+            # Note: Sentry deduplicates by integration type, so our custom LoggingIntegration
+            # replaces the default one rather than causing duplicate logs
             integrations = [
                 LoggingIntegration(
                     level=sentry_breadcrumbs_level,
