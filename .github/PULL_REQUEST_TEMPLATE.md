@@ -41,5 +41,15 @@
 - [ ] Migration is backward-compatible
 - [ ] Rollback plan documented
 
+### Environment / Config Changes
+<!-- Required if this PR adds or modifies environment variables, config files, or secrets. Delete section if not applicable. -->
+- [ ] New environment variables documented below
+- [ ] 1Password items created/updated (if secrets)
+- [ ] Config changes communicated to team
+
+| Variable | Description | Where to add |
+|----------|-------------|--------------|
+|          |             |              |
+
 ---
 **Reminder:** Move this PR out of draft and tag reviewers only when all applicable items above are checked.
