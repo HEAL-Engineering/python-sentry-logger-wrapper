@@ -37,9 +37,14 @@
 - [ ] Feature flag or incremental rollout plan in place
 
 ### Database Changes
-<!-- Required if this PR includes migrations. Delete section if not applicable. -->
-- [ ] Migration is backward-compatible
-- [ ] Rollback plan documented
+<!-- Required if this PR includes database schema changes or migrations. Delete section if not applicable. -->
+- [ ] No database model changes in this PR
+- [ ] Migration file generated and included
+- [ ] Migration file reviewed manually (autogenerate is a DRAFT, not finished code)
+- [ ] Migration tested locally (upgrade, downgrade, re-upgrade)
+- [ ] Migration is backward-compatible (no column renames as drop+add)
+- [ ] Rollback plan documented (downgrade works correctly)
+- [ ] If enum/constraint values changed: manual migration written (autogenerate can't detect these)
 
 ### Environment / Config Changes
 <!-- Required if this PR adds or modifies environment variables, config files, or secrets. Delete section if not applicable. -->
