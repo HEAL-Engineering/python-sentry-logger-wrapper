@@ -1,3 +1,10 @@
+<!--
+CLAUDE INSTRUCTIONS (delete this block when submitting):
+- Write a brief Summary: 1-2 short paragraphs or bullet points covering key changes
+- Link the ticket if the branch name contains a ticket ID (e.g., HEA-123)
+- Leave the rest of the template for the user to fill out
+- After creating the PR, tell the user which checklist sections they should review
+-->
 ## Summary
 <!-- One or two short paragraphs explaining the "why" and "what". Link ticket/spec if it exists. -->
 
