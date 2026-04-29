@@ -28,6 +28,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          # Check out the actual latest pushed commit, not the auto-generated
+          # merge ref. The merge ref can lag behind synchronize events, which
+          # causes Claude to review the original PR state on every push.
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
@@ -38,27 +42,51 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD SHA: ${{ github.event.pull_request.head.sha }}
 
-            Review this pull request for:
+            The PR branch HEAD (${{ github.event.pull_request.head.sha }}) is
+            checked out in the working directory. Always read files from disk
+            to verify the CURRENT state — do not rely on the diff alone or on
+            memory of earlier reviews.
+
+            Before posting any new inline comments, do these checks in order:
+
+            1. Get the latest diff for this exact commit:
+               gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }}
+
+            2. Fetch existing inline review comments so you do not duplicate
+               feedback that an earlier run already left:
+               gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments
+
+            3. For each issue you are about to flag:
+               - Open the file at the relevant line with Read and confirm the
+                 problem still exists in the current code.
+               - Skip it if a prior inline comment already raised the same
+                 point on the same file/line, or if the latest commit has
+                 already addressed it.
+
+            Review for:
             1. Bugs and logic errors
             2. Security vulnerabilities (injection, auth bypasses, exposed secrets)
             3. Performance issues (N+1 queries, unnecessary allocations, missing indexes)
             4. Race conditions and concurrency issues
 
-            For each specific issue you find in the diff, use the
-            mcp__github_inline_comment__create_inline_comment tool to post it as an
-            inline comment on the exact file and line where the issue occurs.
-            Set confirmed=true on each call so comments are posted immediately.
+            For each remaining specific issue, use
+            mcp__github_inline_comment__create_inline_comment with
+            confirmed=true to post it on the exact file and line where the
+            issue occurs.
 
             Rules:
             - Be concise and actionable. Explain WHY something is a problem and suggest a fix.
             - Do NOT comment on code style, formatting, naming conventions, or minor preferences.
+            - Do NOT re-post a comment an earlier review already left, even if reworded.
+            - Quote the exact line you are commenting on (from the current file on disk) so reviewers can confirm you saw the latest code.
             - If the PR looks good, say so briefly. Do not manufacture issues.
 
             After posting all inline comments, write a brief summary of overall findings.
           claude_args: >-
             --model claude-sonnet-4-20250514
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api:*),Read,Glob,Grep"
 
   interactive:
     # Responds to @claude mentions in PR comments (org members/collaborators only)
@@ -70,8 +98,21 @@ jobs:
        github.event.comment.author_association == 'COLLABORATOR')
     runs-on: ubuntu-latest
     steps:
+      # Resolve the PR head SHA via the API so the checkout is pinned to the
+      # latest pushed commit, not the default branch. issue_comment events do
+      # not expose head.sha directly, so we look it up.
+      - name: Resolve PR head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.pull_request && github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          sha=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid -q .headRefOid)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v6
         with:
+          ref: ${{ steps.pr.outputs.sha }}
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
