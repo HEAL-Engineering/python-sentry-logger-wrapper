@@ -1,4 +1,4 @@
-# python-sentry-logger-wrapper
+# sentry-struct-logger
 
 Standardized structured (JSON) logging package with built-in Sentry integration for Python applications.
 
@@ -18,10 +18,10 @@ Standardized structured (JSON) logging package with built-in Sentry integration 
 ## Installation
 
 ```bash
-uv add python-sentry-logger-wrapper
+uv add sentry-struct-logger
 
 # Or using pip
-pip install python-sentry-logger-wrapper
+pip install sentry-struct-logger
 ```
 
 ## Quick Start
