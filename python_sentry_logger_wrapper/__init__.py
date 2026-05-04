@@ -13,5 +13,5 @@ Basic Usage:
 """
 from .core import get_logger, reset_configuration
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["get_logger", "reset_configuration"]
