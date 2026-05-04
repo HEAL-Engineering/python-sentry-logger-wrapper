@@ -18,11 +18,10 @@ Standardized structured (JSON) logging package with built-in Sentry integration 
 ## Installation
 
 ```bash
-# Install from GitHub using uv
-uv add git+https://github.com/HEAL-Engineering/python-sentry-logger-wrapper.git
+uv add python-sentry-logger-wrapper
 
 # Or using pip
-pip install git+https://github.com/HEAL-Engineering/python-sentry-logger-wrapper.git
+pip install python-sentry-logger-wrapper
 ```
 
 ## Quick Start
@@ -95,10 +94,10 @@ async def create(item: Item):
 
 **Console output (all logs share the same `trace_id`):**
 ```json
-{"timestamp": "...", "log_level": "INFO", "service_name": "example-api", "message": "Creating item", "trace_id": "abc123...", "details": {"item_count": 3}}
-{"timestamp": "...", "log_level": "INFO", "service_name": "example-api", "message": "Validating item", "trace_id": "abc123...", "details": {}}
-{"timestamp": "...", "log_level": "INFO", "service_name": "example-api", "message": "Processing external request", "trace_id": "abc123...", "details": {}}
-{"timestamp": "...", "log_level": "INFO", "service_name": "example-api", "message": "Saving to database", "trace_id": "abc123...", "details": {}}
+{"timestamp": "...", "log_level": "INFO", "logger": "example-api", "message": "Creating item", "trace_id": "abc123...", "span_id": "def456...", "details": {"item_count": 3}}
+{"timestamp": "...", "log_level": "INFO", "logger": "example-api", "message": "Validating item", "trace_id": "abc123...", "span_id": "def456..."}
+{"timestamp": "...", "log_level": "INFO", "logger": "example-api", "message": "Processing external request", "trace_id": "abc123...", "span_id": "def456..."}
+{"timestamp": "...", "log_level": "INFO", "logger": "example-api", "message": "Saving to database", "trace_id": "abc123...", "span_id": "def456..."}
 ```
 
 **In Sentry:**
@@ -111,9 +110,10 @@ async def create(item: Item):
 ### Standard Fields (top-level)
 - `timestamp` - ISO 8601 UTC timestamp
 - `log_level` - INFO, WARNING, ERROR, etc.
-- `service_name` - Your service identifier
+- `logger` - Your service identifier (the name passed to `get_logger()`)
 - `message` - Log message
-- `trace_id` - Distributed tracing ID (automatically added by Sentry)
+- `trace_id` - Distributed tracing ID (only present when Sentry is enabled)
+- `span_id` - Span ID for the current operation (only present when Sentry is enabled)
 
 ### Custom Fields (nested under `details`)
 Any additional fields you pass are automatically nested:
@@ -182,7 +182,7 @@ logger.critical("System down", reason="database_unavailable")
 ## FAQ
 
 **Q: Do I need to pass `trace_id` manually through my functions?**
-A: No! It's automatically propagated through your entire call stack via context variables.
+A: No! It's automatically propagated through your entire call stack via Sentry's tracing.
 
 **Q: Can I use this without Sentry?**
 A: Yes! Just omit `sentry_dsn` and you'll get JSON logs to stdout only.

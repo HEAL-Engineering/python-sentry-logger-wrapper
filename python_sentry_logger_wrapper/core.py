@@ -53,7 +53,7 @@ def get_logger(
         >>> logger = get_logger("my-service", sentry_dsn="https://...")
         >>> logger.info("Service started", version="1.0.0")
         {"timestamp": "2024-01-15T10:30:00Z", "log_level": "INFO",
-         "service_name": "my-service", "message": "Service started",
+         "logger": "my-service", "message": "Service started",
          "details": {"version": "1.0.0"}}
     """
     global _is_configured
