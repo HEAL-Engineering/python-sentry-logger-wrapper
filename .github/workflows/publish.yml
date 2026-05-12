@@ -1,28 +1,60 @@
 name: Publish to PyPI
 
 on:
-  workflow_dispatch:  # Manual trigger via GitHub UI
+  push:
+    tags:
+      - "v*"          # Releases are cut by pushing an annotated tag (e.g. v0.2.0).
+  workflow_dispatch:  # Escape hatch — must be dispatched against a v* tag (see job-level `if`).
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: pypi  # Optional: adds approval step in GitHub
+    # Hard guard: this workflow only ever publishes from a v* tag, regardless of how it was
+    # triggered. Stops a manual workflow_dispatch against `main` from accidentally uploading a
+    # dev version (e.g. 0.1.1.dev1) to PyPI.
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi   # Gates the run on a manual approval (configured on the environment).
     permissions:
-      id-token: write  # Required for trusted publishing
+      contents: read    # Default scope gets replaced (not merged) when `permissions:` is declared.
+      id-token: write   # Required for PyPI trusted publishing (OIDC).
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # setuptools-scm needs full history + tags to derive the version.
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.13"
 
       - name: Install build tools
         run: pip install build
 
       - name: Build package
         run: python -m build
+
+      - name: Verify all built artifacts match the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          echo "Tag version: $tag"
+
+          # Collect the version from every wheel and sdist in dist/ — they must all agree
+          # with each other and with the tag. Filenames follow PEP 491/625:
+          #   {dist}-{version}-{python}-{abi}-{plat}.whl
+          #   {dist}-{version}.tar.gz
+          versions=$(
+            for f in dist/*.whl dist/*.tar.gz; do
+              basename "$f" | sed -E 's/\.tar\.gz$//' | awk -F- '{print $2}'
+            done | sort -u
+          )
+          echo "Built versions:"
+          printf '  %s\n' $versions
+
+          # Fail if dist/ has artifacts at multiple versions, or if the version doesn't match the tag.
+          count=$(printf '%s\n' "$versions" | wc -l | tr -d ' ')
+          test "$count" -eq 1
+          test "$versions" = "$tag"
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
