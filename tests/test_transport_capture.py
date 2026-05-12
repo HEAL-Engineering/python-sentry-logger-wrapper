@@ -74,6 +74,30 @@ def _find_event_payload(envelopes, needle: str):
     return None
 
 
+def _find_event_type_items(envelopes, needle: str):
+    """Walk envelopes for items whose header type is exactly 'event' (Issues/Errors).
+
+    Excludes 'log' items (Logs product), 'transaction' items, breadcrumbs, etc.
+    Returns the list of matching event payloads.
+    """
+    matches = []
+    for envelope in envelopes:
+        for item in envelope.items:
+            item_type = item.headers.get("type") if hasattr(item, "headers") else None
+            if item_type != "event":
+                continue
+            payload = getattr(item, "payload", None)
+            if payload is None:
+                continue
+            try:
+                data = payload.json
+            except Exception:
+                continue
+            if data and needle in str(data):
+                matches.append(data)
+    return matches
+
+
 def test_error_log_produces_sentry_envelope(capture_transport):
     """logger.error() through structlog → stdlib → LoggingIntegration → envelope."""
     logger = get_logger(
@@ -122,8 +146,13 @@ def test_service_name_tag_on_captured_envelope(capture_transport):
         ) in tags
 
 
-def test_info_log_below_event_threshold_does_not_envelope(capture_transport):
-    """info-level log with sentry_event_level=ERROR should not produce an event envelope."""
+def test_info_log_below_event_threshold_produces_no_event_item(capture_transport):
+    """INFO log with sentry_event_level=ERROR: no envelope item of type=event.
+
+    The Logs product (separate pipeline) may still produce a 'log' item — that's
+    fine and even expected when sentry_logs_level=INFO. We specifically assert
+    that no Issues/Errors event is created.
+    """
     logger = get_logger(
         "svc",
         sentry_dsn="https://public@o0.ingest.sentry.io/0",
@@ -134,9 +163,26 @@ def test_info_log_below_event_threshold_does_not_envelope(capture_transport):
     logger.info("not-an-event")
     sentry_sdk.flush(timeout=2.0)
 
-    # Logs product or breadcrumb may still produce an envelope; just assert there's
-    # no "event" type item carrying our info message.
-    data = _find_event_payload(capture_transport.captured, "not-an-event")
-    if data is not None:
-        # If we found a match, it must not be an exception/event with this as the message
-        assert data.get("level") != "error"
+    event_items = _find_event_type_items(capture_transport.captured, "not-an-event")
+    assert event_items == [], (
+        f"INFO log should not produce 'event' envelope items when "
+        f"sentry_event_level=ERROR; got {len(event_items)}: {event_items!r}"
+    )
+
+
+def test_error_log_produces_event_type_item(capture_transport):
+    """Confirm the negative test above is meaningful: ERROR DOES produce event items."""
+    logger = get_logger(
+        "svc",
+        sentry_dsn="https://public@o0.ingest.sentry.io/0",
+        sentry_environment="production",
+        sentry_event_level=logging.ERROR,
+    )
+
+    logger.error("real-error-canary")
+    sentry_sdk.flush(timeout=2.0)
+
+    event_items = _find_event_type_items(
+        capture_transport.captured, "real-error-canary"
+    )
+    assert event_items, "ERROR log must produce at least one 'event' envelope item"

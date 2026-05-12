@@ -65,29 +65,43 @@ def test_before_send_transaction_passes_other_transactions(mock_sentry_sdk):
     assert cb(event, {}) is event
 
 
-def test_before_send_log_drops_below_threshold(mock_sentry_sdk):
-    """before_send_log respects sentry_event_level."""
+def test_before_send_log_drops_below_logs_threshold(mock_sentry_sdk):
+    """before_send_log filters by sentry_logs_level (Logs threshold), NOT event_level."""
     get_logger(
         "svc",
         sentry_dsn="https://k@o.ingest.sentry.io/1",
         sentry_environment="production",
-        sentry_event_level=logging.ERROR,
+        sentry_logs_level=logging.WARNING,
     )
     cb = _get_callback(mock_sentry_sdk, "before_send_log")
-    info_event = {"severity_text": "info", "body": "noise"}
+    info_event = {"severity_text": "info", "body": "noise below threshold"}
     assert cb(info_event, {}) is None
 
 
-def test_before_send_log_passes_above_threshold(mock_sentry_sdk):
+def test_before_send_log_passes_at_or_above_logs_threshold(mock_sentry_sdk):
     get_logger(
         "svc",
         sentry_dsn="https://k@o.ingest.sentry.io/1",
         sentry_environment="production",
-        sentry_event_level=logging.ERROR,
+        sentry_logs_level=logging.WARNING,
     )
     cb = _get_callback(mock_sentry_sdk, "before_send_log")
-    err_event = {"severity_text": "error", "body": "real failure"}
-    assert cb(err_event, {}) is err_event
+    warn_event = {"severity_text": "warning", "body": "at threshold"}
+    assert cb(warn_event, {}) is warn_event
+
+
+def test_before_send_log_threshold_is_independent_of_event_level(mock_sentry_sdk):
+    """Raising sentry_event_level must not affect Logs-product filtering."""
+    get_logger(
+        "svc",
+        sentry_dsn="https://k@o.ingest.sentry.io/1",
+        sentry_environment="production",
+        sentry_event_level=logging.CRITICAL,  # high — would drop INFO if conflated
+        sentry_logs_level=logging.INFO,  # but Logs threshold is INFO
+    )
+    cb = _get_callback(mock_sentry_sdk, "before_send_log")
+    info_event = {"severity_text": "info", "body": "should reach Logs"}
+    assert cb(info_event, {}) is info_event
 
 
 def test_before_breadcrumb_drops_uvicorn_health_crumb(mock_sentry_sdk):
