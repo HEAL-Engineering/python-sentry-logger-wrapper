@@ -2,13 +2,6 @@ name: Lint
 
 on:
   workflow_call:
-  pull_request:
-    branches: [main]
-    paths:
-      - "python_sentry_logger_wrapper/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - ".github/workflows/lint.yml"
 
 permissions:
   contents: read
