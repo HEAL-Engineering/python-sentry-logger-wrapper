@@ -1,8 +1,9 @@
 """Custom processors for python-sentry-logger-wrapper to shape logs into the standard schema."""
-from typing import Any, Dict
-from structlog.types import EventDict, WrappedLogger
-import sentry_sdk
 
+from typing import Any, Dict
+
+import sentry_sdk
+from structlog.types import EventDict, WrappedLogger
 
 STANDARD_FIELDS = {
     "timestamp",
@@ -43,16 +44,16 @@ def rename_and_flatten_fields(
         logger: The wrapped logger instance
         method_name: The name of the method called (e.g., 'info', 'error')
         event_dict: The current state of the log entry
-        
+
     Returns:
         The modified event dictionary
     """
     if "event" in event_dict:
         event_dict["message"] = event_dict.pop("event")
-        
+
     if "level" in event_dict:
         event_dict["log_level"] = event_dict.pop("level").upper()
-        
+
     return event_dict
 
 
@@ -88,6 +89,7 @@ def add_sentry_trace_id(
         pass  # Silently continue without trace_id if unavailable
 
     return event_dict
+
 
 def nest_custom_fields(
     logger: WrappedLogger, method_name: str, event_dict: EventDict
