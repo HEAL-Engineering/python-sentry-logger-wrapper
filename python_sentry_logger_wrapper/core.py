@@ -122,18 +122,17 @@ def get_logger(
 
             def before_send_log(event, hint):
                 """
-                Filter logs before sending to Sentry.
+                Filter items going to Sentry's Logs product.
 
-                This prevents health check endpoint spam in Sentry and enforces
-                minimum log levels. Health checks can generate thousands of logs
-                per day and pollute your Sentry quota and dashboard.
-
-                Filters applied:
-                - Removes logs below sentry_event_level (default: ERROR)
-                - Removes uvicorn.access logs from GET /health endpoint
+                Belt-and-suspenders with LoggingIntegration(sentry_logs_level=...):
+                drops anything below sentry_logs_level (the Logs threshold, NOT the
+                events/Issues threshold) and strips uvicorn /health chatter so the
+                Logs view stays useful and quota stays sane.
                 """
 
-                # Filter by log severity level
+                # Filter by log severity level — uses sentry_logs_level (Logs product
+                # threshold), NOT sentry_event_level (Issues threshold). The two
+                # pipelines are independent.
                 severity_text = event.get("severity_text")
                 if severity_text:
                     # Map Sentry severity levels to Python logging levels
@@ -146,7 +145,7 @@ def get_logger(
                         "fatal": logging.CRITICAL,
                     }
                     event_level = severity_map.get(severity_text.lower(), logging.INFO)
-                    if event_level < sentry_event_level:
+                    if event_level < sentry_logs_level:
                         return None
 
                 # Check logger field (for event-level logs)
@@ -273,7 +272,6 @@ def get_logger(
                 send_default_pii=sentry_send_pii,
                 integrations=integrations,
             )
-            sentry_sdk.set_tag("service", service_name)
         elif sentry_dsn:
             sentry_sdk.init(
                 dsn=sentry_dsn,
@@ -281,7 +279,6 @@ def get_logger(
                 default_integrations=False,
                 traces_sample_rate=0.0,
             )
-            sentry_sdk.set_tag("service", service_name)
 
         # "auto" → console under a TTY, else JSON. Resolved once at configure time.
         resolved_renderer: Literal["json", "console"] = (
@@ -338,6 +335,12 @@ def get_logger(
         root_logger.setLevel(log_level)
 
         _is_configured = True
+
+    # Tag every call (not just first-time setup) so callers with different
+    # service_names get the right tag — last call wins. Safe no-op when
+    # Sentry isn't initialized.
+    if sentry_dsn:
+        sentry_sdk.set_tag("service", service_name)
 
     logger = structlog.get_logger(service_name)
 
