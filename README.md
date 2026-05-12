@@ -144,9 +144,49 @@ logger = get_logger(
     log_level=logging.INFO,  # Minimum log level for stdout
     sentry_dsn="https://...",  # Optional: enables Sentry
     sentry_environment="production",  # Optional: environment tag
-    sentry_sample_rate=0.1  # Optional: sample 10% of traces (reduces costs)
+    sentry_sample_rate=0.1,  # Optional: sample 10% of traces (reduces costs)
+    renderer="auto",  # Optional: "json" (default), "console", or "auto"
 )
 ```
+
+## Renderer modes
+
+`get_logger()` accepts `renderer="json" | "console" | "auto"` to control how logs are formatted on stdout. The default is `"json"` — **existing consumers see zero behavior change**.
+
+| Mode | Output | When to use |
+|---|---|---|
+| `"json"` (default) | Structured JSON, one event per line | Production. Anywhere logs feed an aggregator (ELK, Datadog, CloudWatch, Loki, etc.). |
+| `"console"` | Colored, human-readable via `structlog.dev.ConsoleRenderer` | Local development. Reading logs in your terminal. |
+| `"auto"` | `"console"` when `sys.stdout.isatty()` is True, else `"json"` | Set-and-forget. Mirrors `git` / `ls --color=auto`. |
+
+### How `"auto"` decides
+
+`sys.stdout.isatty()` returns:
+- **`True`** when stdout is an interactive terminal → renders as **console**.
+- **`False`** when stdout is redirected to a file, piped to another process, or running under Docker / CI / Kubernetes / systemd → renders as **JSON**.
+
+That means a consumer can set `renderer="auto"` once and get colored logs while developing, and JSON the moment their service ships — no environment branching required.
+
+### Renderer choice does NOT affect Sentry
+
+Sentry's `LoggingIntegration` intercepts events at the stdlib `logging.Handler` level — **before** the renderer runs. Switching between `"json"` and `"console"` only changes what hits stdout; Sentry ingestion (errors, breadcrumbs, trace context) is identical either way.
+
+### Example
+
+```python
+# Production service feeding a log aggregator — default works fine
+logger = get_logger(service_name="my-service")
+
+# Local dev script — pretty colored output
+logger = get_logger(service_name="my-service", renderer="console")
+
+# Best of both: pretty in your shell, JSON when piped to a file or shipped to a container
+logger = get_logger(service_name="my-service", renderer="auto")
+```
+
+### Migration note
+
+If you currently call `get_logger(...)` without the `renderer` argument, the default stays `"json"` — your output won't change. Opt into `"console"` or `"auto"` only where you want it.
 
 ### What Gets Sent to Sentry
 

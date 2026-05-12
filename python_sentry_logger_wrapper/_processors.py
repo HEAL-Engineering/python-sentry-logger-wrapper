@@ -4,7 +4,19 @@ from structlog.types import EventDict, WrappedLogger
 import sentry_sdk
 
 
-STANDARD_FIELDS = {"timestamp", "log_level", "message", "trace_id", "span_id", "logger"}
+STANDARD_FIELDS = {
+    "timestamp",
+    "log_level",
+    "message",
+    "trace_id",
+    "span_id",
+    "logger",
+    # Kept top-level so the final renderer (e.g. ConsoleRenderer) can format tracebacks
+    # natively. In JSON mode these are consumed by format_exc_info / StackInfoRenderer
+    # earlier in the chain, so they never reach the nesting step.
+    "exc_info",
+    "stack_info",
+}
 
 
 def remove_processors_meta_safe(

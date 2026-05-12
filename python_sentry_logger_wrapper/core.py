@@ -1,7 +1,7 @@
 """Core functionality for the python-sentry-logger-wrapper package."""
 import logging
 import sys
-from typing import Optional, TYPE_CHECKING
+from typing import Literal, Optional, TYPE_CHECKING
 
 import structlog
 from structlog.stdlib import BoundLogger
@@ -9,6 +9,8 @@ import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 
 from ._processors import nest_custom_fields, rename_and_flatten_fields, remove_processors_meta_safe, add_sentry_trace_id
+
+RendererChoice = Literal["json", "console", "auto"]
 
 # Type hint for static analysis - import is conditional at runtime
 if TYPE_CHECKING:
@@ -35,14 +37,15 @@ def get_logger(
     sentry_send_pii: bool = False,
     lambda_integration: bool = False,
     lambda_timeout_warning: bool = True,
+    renderer: RendererChoice = "json",
 ) -> BoundLogger:
     """
     Configures and returns a standard logger with optional Sentry integration.
 
     This function initializes structlog with a processor chain to produce
-    standardized JSON logs to stdout. It also configures the standard
-    logging library to route its logs through the same system, ensuring
-    logs from third-party libraries are also captured in JSON format.
+    standardized logs to stdout. It also configures the standard logging
+    library to route its logs through the same system, ensuring logs from
+    third-party libraries are rendered consistently.
 
     Args:
         service_name: The name of the service, which will be included in all logs.
@@ -57,6 +60,16 @@ def get_logger(
             Requires the 'lambda' extra: uv add "python-sentry-logger-wrapper[lambda]"
         lambda_timeout_warning: When lambda_integration=True, whether to warn about
             Lambda timeouts (default True).
+        renderer: How to format stdout output. One of:
+            - "json" (default): structured JSON, suited for log aggregators (ELK, Datadog,
+              CloudWatch). Backwards-compatible — existing consumers see no change.
+            - "console": colored, human-readable output via ``structlog.dev.ConsoleRenderer``.
+              For local development.
+            - "auto": resolves to "console" when ``sys.stdout.isatty()`` is True (interactive
+              terminal), else "json" (piped, redirected, Docker, CI, k8s). Mirrors the
+              ``ls --color=auto`` convention.
+            Renderer choice does NOT affect Sentry ingestion — Sentry's ``LoggingIntegration``
+            captures events at the stdlib handler level, before this renderer runs.
 
     Note:
         Health check filtering: In production/test environments, all /health endpoint
@@ -73,6 +86,12 @@ def get_logger(
          "logger": "my-service", "message": "Service started",
          "details": {"version": "1.0.0"}}
     """
+    # TODO: tests once testing-infra PR lands — cover the renderer matrix:
+    #   - renderer="json" produces parseable JSON (regression)
+    #   - renderer="console" produces non-JSON colored output
+    #   - renderer="auto" resolves to console under a TTY, JSON when piped
+    #   - format_exc_info is dropped iff resolved renderer is "console"
+    #   - foreign (stdlib) logs flow through the same final renderer
     global _is_configured
 
     if not _is_configured:
@@ -234,19 +253,33 @@ def get_logger(
             )
             
 
-        shared_processors = [
+        # "auto" → console under a TTY, else JSON. Resolved once at configure time.
+        resolved_renderer: Literal["json", "console"] = (
+            ("console" if sys.stdout.isatty() else "json")
+            if renderer == "auto"
+            else renderer
+        )
+
+        shared_processors: list = [
             structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_log_level,
             structlog.stdlib.add_logger_name,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            rename_and_flatten_fields,
-            nest_custom_fields
         ]
+        # ConsoleRenderer pretty-prints tracebacks itself from raw exc_info; running
+        # format_exc_info first stringifies them and produces worse output.
+        if resolved_renderer == "json":
+            shared_processors.append(structlog.processors.format_exc_info)
+        shared_processors.extend([rename_and_flatten_fields, nest_custom_fields])
 
         if sentry_dsn:
             shared_processors.append(add_sentry_trace_id)
+
+        if resolved_renderer == "console":
+            final_renderer = structlog.dev.ConsoleRenderer(colors=True)
+        else:
+            final_renderer = structlog.processors.JSONRenderer(ensure_ascii=False)
 
         structlog.configure(
             processors=shared_processors + [
@@ -261,7 +294,7 @@ def get_logger(
             foreign_pre_chain=shared_processors,
             processors=[
                 remove_processors_meta_safe,
-                structlog.processors.JSONRenderer(ensure_ascii=False),
+                final_renderer,
             ],
         )
 
