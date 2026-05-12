@@ -11,6 +11,7 @@ Basic Usage:
     logger = get_logger("my-service")
     logger.info("Service started", version="1.0.0")
 """
+
 from importlib.metadata import PackageNotFoundError, version
 
 from .core import get_logger, reset_configuration
