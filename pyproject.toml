@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=80", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "sentry-struct-logger"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Standardized structured (JSON) logging package with Sentry integration."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -34,3 +34,9 @@ lambda = ["sentry-sdk[aws-lambda]>=2.49.0"]
 [project.urls]
 Homepage = "https://github.com/HEAL-Engineering/python-sentry-logger-wrapper"
 Issues = "https://github.com/HEAL-Engineering/python-sentry-logger-wrapper/issues"
+
+[tool.setuptools_scm]
+# Used when building outside a git checkout (e.g. an sdist without SCM metadata).
+fallback_version = "0.0.0+unknown"
+# PyPI rejects local-version segments (e.g. "+gabc1234"); strip them on dev builds.
+local_scheme = "no-local-version"
