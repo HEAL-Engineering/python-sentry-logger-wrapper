@@ -141,13 +141,34 @@ Sentry offers 5,000 errors/events per month free - perfect for small projects.
 ```python
 logger = get_logger(
     service_name="my-service",
-    log_level=logging.INFO,  # Minimum log level for stdout
-    sentry_dsn="https://...",  # Optional: enables Sentry
-    sentry_environment="production",  # Optional: environment tag
-    sentry_sample_rate=0.1,  # Optional: sample 10% of traces (reduces costs)
-    renderer="auto",  # Optional: "json" (default), "console", or "auto"
+    log_level=logging.INFO,                       # Minimum log level for stdout
+    sentry_dsn="https://...",                     # Optional: enables Sentry
+    sentry_environment="production",              # Optional: environment tag
+    sentry_breadcrumbs_level=logging.INFO,        # Min level for Sentry breadcrumbs
+    sentry_event_level=logging.ERROR,             # Min level captured as Sentry events (Issues)
+    sentry_logs_level=logging.INFO,               # Min level captured by Sentry Logs product
+    traces_sample_rate=0.0,                       # Performance tracing sample rate (0.0 = off)
+    renderer="auto",                              # "json" (default), "console", or "auto"
 )
 ```
+
+### Sentry quota control
+
+Two parameters let you dial back Sentry usage without forking the package — useful for
+projects on the free plan or chatty services that would otherwise burn through quota.
+
+| Parameter | Default | What it controls | When to change |
+|---|---|---|---|
+| `sentry_logs_level` | `logging.INFO` | Minimum level captured by Sentry's **Logs** product (separate from Errors/Issues). | Raise to `WARNING` or `ERROR` to stop info-level chatter from filling Sentry Logs without affecting error capture. |
+| `traces_sample_rate` | `0.0` | Performance tracing sample rate (0.0–1.0). Passed to `sentry_sdk.init`. | Leave at `0.0` unless you need tracing. Set to `0.1` (10%) for sampled tracing. Above that on a busy service eats the free plan's 10k performance units/month quickly. |
+
+The three log-level knobs are intentionally distinct and map 1:1 to `LoggingIntegration`:
+
+| Parameter | Maps to | Default | Purpose |
+|---|---|---|---|
+| `sentry_breadcrumbs_level` | `LoggingIntegration(level=...)` | `INFO` | Context attached to errors |
+| `sentry_event_level` | `LoggingIntegration(event_level=...)` | `ERROR` | Becomes an Issue in the Errors product |
+| `sentry_logs_level` | `LoggingIntegration(sentry_logs_level=...)` | `INFO` | Structured logs in the Logs product |
 
 ## Renderer modes
 

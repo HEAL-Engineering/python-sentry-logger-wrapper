@@ -1,14 +1,20 @@
 """Core functionality for the python-sentry-logger-wrapper package."""
+
 import logging
 import sys
-from typing import Literal, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Optional
 
-import structlog
-from structlog.stdlib import BoundLogger
 import sentry_sdk
+import structlog
 from sentry_sdk.integrations.logging import LoggingIntegration
+from structlog.stdlib import BoundLogger
 
-from ._processors import nest_custom_fields, rename_and_flatten_fields, remove_processors_meta_safe, add_sentry_trace_id
+from ._processors import (
+    add_sentry_trace_id,
+    nest_custom_fields,
+    remove_processors_meta_safe,
+    rename_and_flatten_fields,
+)
 
 RendererChoice = Literal["json", "console", "auto"]
 _VALID_RENDERERS = frozenset({"json", "console", "auto"})
@@ -20,6 +26,7 @@ if TYPE_CHECKING:
 # Optional Lambda integration - requires 'lambda' extra: uv add "python-sentry-logger-wrapper[lambda]"
 try:
     from sentry_sdk.integrations.aws_lambda import AwsLambdaIntegration
+
     HAS_LAMBDA_INTEGRATION = True
 except ImportError:
     HAS_LAMBDA_INTEGRATION = False
@@ -32,9 +39,10 @@ def get_logger(
     log_level: int = logging.INFO,
     sentry_dsn: Optional[str] = None,
     sentry_breadcrumbs_level: int = logging.INFO,
-    sentry_log_level: int = logging.ERROR,
+    sentry_event_level: int = logging.ERROR,
+    sentry_logs_level: int = logging.INFO,
     sentry_environment: Optional[str] = None,
-    sentry_sample_rate: float = 1.0,
+    traces_sample_rate: float = 0.0,
     sentry_send_pii: bool = False,
     lambda_integration: bool = False,
     lambda_timeout_warning: bool = True,
@@ -52,10 +60,22 @@ def get_logger(
         service_name: The name of the service, which will be included in all logs.
         log_level: The minimum log level to output to stdout (e.g., logging.INFO, logging.DEBUG).
         sentry_dsn: Optional Sentry DSN for error tracking and log monitoring.
-        sentry_breadcrumbs_level: Minimum log level for Sentry breadcrumbs (default: INFO).
-        sentry_log_level: Minimum log level for Sentry events (default: ERROR).
+        sentry_breadcrumbs_level: Minimum level for Sentry **breadcrumbs** — context
+            attached to error events (default: INFO). Maps to ``LoggingIntegration(level=...)``.
+        sentry_event_level: Minimum level at which a log becomes a Sentry **event** —
+            an Issue in the Errors product (default: ERROR). Maps to
+            ``LoggingIntegration(event_level=...)``.
+        sentry_logs_level: Minimum level captured by Sentry's **Logs** product —
+            structured logs separate from errors (default: INFO). Raise to
+            ``logging.WARNING`` (or higher) to drop info-level logs from Sentry Logs
+            without affecting breadcrumbs or event capture — useful for cutting Sentry
+            quota on chatty services. Maps to ``LoggingIntegration(sentry_logs_level=...)``.
         sentry_environment: Optional environment name for Sentry (e.g., "production", "staging").
-        sentry_sample_rate: Sample rate for Sentry traces (0.0 to 1.0, default 1.0).
+        traces_sample_rate: Performance tracing sample rate, 0.0 to 1.0 (default 0.0 — off).
+            Passed straight to ``sentry_sdk.init(traces_sample_rate=...)``. Set to 0.1 for
+            10% sampling, 1.0 for all transactions. Quota note: Sentry's free plan includes
+            10k performance units/month — anything above ~0.1 on a busy service eats that
+            fast. Leave at 0.0 unless you need tracing.
         sentry_send_pii: Whether to send PII (user IPs, cookies, headers) to Sentry (default False).
         lambda_integration: Enable AWS Lambda integration for Sentry (default False).
             Requires the 'lambda' extra: uv add "python-sentry-logger-wrapper[lambda]"
@@ -87,13 +107,6 @@ def get_logger(
          "logger": "my-service", "message": "Service started",
          "details": {"version": "1.0.0"}}
     """
-    # TODO: tests once testing-infra PR lands — cover the renderer matrix:
-    #   - renderer="json" produces parseable JSON (regression)
-    #   - renderer="console" produces non-JSON colored output
-    #   - renderer="auto" resolves to console under a TTY, JSON when piped
-    #   - format_exc_info is dropped iff resolved renderer is "console"
-    #   - foreign (stdlib) logs flow through the same final renderer
-    #   - invalid renderer values raise ValueError
     if renderer not in _VALID_RENDERERS:
         raise ValueError(
             f"renderer must be one of {sorted(_VALID_RENDERERS)}, got {renderer!r}"
@@ -103,7 +116,9 @@ def get_logger(
 
     if not _is_configured:
         # Initialize Sentry if DSN provided
-        if (sentry_environment == "production" or sentry_environment == "test") and sentry_dsn:
+        if (
+            sentry_environment == "production" or sentry_environment == "test"
+        ) and sentry_dsn:
 
             def before_send_log(event, hint):
                 """
@@ -114,7 +129,7 @@ def get_logger(
                 per day and pollute your Sentry quota and dashboard.
 
                 Filters applied:
-                - Removes logs below sentry_log_level (default: ERROR)
+                - Removes logs below sentry_event_level (default: ERROR)
                 - Removes uvicorn.access logs from GET /health endpoint
                 """
 
@@ -123,15 +138,15 @@ def get_logger(
                 if severity_text:
                     # Map Sentry severity levels to Python logging levels
                     severity_map = {
-                        'debug': logging.DEBUG,
-                        'info': logging.INFO,
-                        'warn': logging.WARNING,
-                        'warning': logging.WARNING,
-                        'error': logging.ERROR,
-                        'fatal': logging.CRITICAL,
+                        "debug": logging.DEBUG,
+                        "info": logging.INFO,
+                        "warn": logging.WARNING,
+                        "warning": logging.WARNING,
+                        "error": logging.ERROR,
+                        "fatal": logging.CRITICAL,
                     }
                     event_level = severity_map.get(severity_text.lower(), logging.INFO)
-                    if event_level < sentry_log_level:
+                    if event_level < sentry_event_level:
                         return None
 
                 # Check logger field (for event-level logs)
@@ -154,15 +169,19 @@ def get_logger(
 
             # Map logging levels to Sentry breadcrumb level strings
             breadcrumb_level_map = {
-                logging.DEBUG: 'debug',
-                logging.INFO: 'info',
-                logging.WARNING: 'warning',
-                logging.ERROR: 'error',
-                logging.CRITICAL: 'fatal',
+                logging.DEBUG: "debug",
+                logging.INFO: "info",
+                logging.WARNING: "warning",
+                logging.ERROR: "error",
+                logging.CRITICAL: "fatal",
             }
-            min_breadcrumb_level = breadcrumb_level_map.get(sentry_breadcrumbs_level, 'info')
-            breadcrumb_levels = ['debug', 'info', 'warning', 'error', 'fatal']
-            allowed_breadcrumb_levels = breadcrumb_levels[breadcrumb_levels.index(min_breadcrumb_level):]
+            min_breadcrumb_level = breadcrumb_level_map.get(
+                sentry_breadcrumbs_level, "info"
+            )
+            breadcrumb_levels = ["debug", "info", "warning", "error", "fatal"]
+            allowed_breadcrumb_levels = breadcrumb_levels[
+                breadcrumb_levels.index(min_breadcrumb_level) :
+            ]
 
             def before_breadcrumb(crumb, hint):
                 """
@@ -177,12 +196,12 @@ def get_logger(
                 - Enforces minimum breadcrumb level (sentry_breadcrumbs_level)
                 """
                 # Filter out uvicorn health check breadcrumbs
-                if crumb.get('category', "") == 'uvicorn.access':
-                    message = crumb.get('message', '')
-                    if 'GET /health' in message:
+                if crumb.get("category", "") == "uvicorn.access":
+                    message = crumb.get("message", "")
+                    if "GET /health" in message:
                         return None
 
-                crumb_level = crumb.get('level')
+                crumb_level = crumb.get("level")
 
                 # If breadcrumb has no level (e.g., HTTP, DB queries), check type
                 if crumb_level is None:
@@ -226,7 +245,8 @@ def get_logger(
             integrations = [
                 LoggingIntegration(
                     level=sentry_breadcrumbs_level,
-                    event_level=sentry_log_level,
+                    event_level=sentry_event_level,
+                    sentry_logs_level=sentry_logs_level,
                 ),
             ]
 
@@ -237,12 +257,14 @@ def get_logger(
                         "Lambda integration requires the 'lambda' extra. "
                         "Install with: uv add 'python-sentry-logger-wrapper[lambda]'"
                     )
-                integrations.append(AwsLambdaIntegration(timeout_warning=lambda_timeout_warning))
+                integrations.append(
+                    AwsLambdaIntegration(timeout_warning=lambda_timeout_warning)
+                )
 
             sentry_sdk.init(
                 dsn=sentry_dsn,
                 environment=sentry_environment,
-                traces_sample_rate=sentry_sample_rate,
+                traces_sample_rate=traces_sample_rate,
                 enable_logs=True,
                 before_send=before_send,
                 before_send_log=before_send_log,
@@ -251,6 +273,7 @@ def get_logger(
                 send_default_pii=sentry_send_pii,
                 integrations=integrations,
             )
+            sentry_sdk.set_tag("service", service_name)
         elif sentry_dsn:
             sentry_sdk.init(
                 dsn=sentry_dsn,
@@ -258,7 +281,7 @@ def get_logger(
                 default_integrations=False,
                 traces_sample_rate=0.0,
             )
-            
+            sentry_sdk.set_tag("service", service_name)
 
         # "auto" → console under a TTY, else JSON. Resolved once at configure time.
         resolved_renderer: Literal["json", "console"] = (
@@ -289,7 +312,8 @@ def get_logger(
             final_renderer = structlog.processors.JSONRenderer(ensure_ascii=False)
 
         structlog.configure(
-            processors=shared_processors + [
+            processors=shared_processors
+            + [
                 structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
             ],
             logger_factory=structlog.stdlib.LoggerFactory(),
@@ -307,7 +331,7 @@ def get_logger(
 
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(formatter)
-        
+
         root_logger = logging.getLogger()
         root_logger.handlers.clear()
         root_logger.addHandler(handler)
@@ -316,14 +340,14 @@ def get_logger(
         _is_configured = True
 
     logger = structlog.get_logger(service_name)
-    
+
     return logger
 
 
 def reset_configuration():
     """
     Resets the logger configuration. Useful for testing or reconfiguration.
-    
+
     Warning: This should generally not be used in production code.
     """
     global _is_configured
