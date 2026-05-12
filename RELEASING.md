@@ -1,8 +1,8 @@
 # Releasing
 
-This document describes how versions are determined, how to cut a release, and the planned path to fully automated PyPI publishing.
+This document describes how versions are determined and how to cut a release.
 
-> **TL;DR** — Versions come from git tags. To release, tag the commit (`vX.Y.Z`) and push the tag. Once trusted publishing is wired up (see below), PyPI publish is automatic.
+> **TL;DR** — Versions come from git tags. To release: `git tag -a vX.Y.Z -m "Release X.Y.Z" && git push origin vX.Y.Z`, then approve the deployment in the GitHub Actions UI. PyPI publish is automatic via trusted publishing.
 
 ---
 
@@ -30,9 +30,9 @@ We set `local_scheme = "no-local-version"` so dev builds get clean PEP 440 versi
 
 ---
 
-## Cutting a release (manual, today)
+## Cutting a release
 
-Until trusted publishing is set up, the release is two commands locally plus an upload step.
+Releases are automated via [`.github/workflows/publish.yml`](.github/workflows/publish.yml). Pushing a `v*` tag builds the wheel and uploads it to PyPI through [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC, no API tokens to manage).
 
 ```bash
 # 1. Make sure main is clean and up to date
@@ -43,17 +43,20 @@ git pull --ff-only
 git tag -a v0.2.0 -m "Release 0.2.0"
 git push origin v0.2.0
 
-# 3. Build artifacts (uses setuptools-scm to stamp the version)
-python -m build
-
-# 4. Verify the wheel name matches the tag
-ls dist/   # should show sentry_struct_logger-0.2.0-*.whl
-
-# 5. Upload to PyPI
-python -m twine upload dist/*
+# 3. Approve the run in GitHub Actions
+#    (the `pypi` environment gates publish on a required reviewer).
 ```
 
 That's it. The git tag is the release.
+
+The workflow also accepts `workflow_dispatch`, so you can manually re-run a publish from the Actions UI if a tag-push run failed and you'd rather not re-tag.
+
+### Already configured (FYI, not setup steps)
+
+These are configured once per project and shouldn't need to change:
+
+- **PyPI trusted publisher** is registered against this repo + `publish.yml` + the `pypi` environment.
+- **GitHub `pypi` environment** has required reviewers configured — that's the manual approval gate.
 
 ### Choosing the next version (SemVer)
 
@@ -71,71 +74,9 @@ While on `0.x`, treat **minor** bumps as the breaking-change signal — consumer
 
 ---
 
-## Automating the release (recommended next step)
+## Going further (optional)
 
-The manual flow above is fine, but a one-file GitHub Actions workflow can publish on tag push using **PyPI Trusted Publishing** (OIDC — no long-lived API tokens, nothing to rotate).
-
-### One-time setup
-
-1. Go to <https://pypi.org/manage/project/sentry-struct-logger/settings/publishing/> and add a **GitHub Actions** trusted publisher with:
-   - **Owner**: `HEAL-Engineering`
-   - **Repository**: `python-sentry-logger-wrapper`
-   - **Workflow filename**: `release.yml`
-   - **Environment** (recommended): `pypi`
-2. In GitHub, create a [protected environment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment) named `pypi` and require a manual approval reviewer.
-
-### `.github/workflows/release.yml` (template for a follow-up PR)
-
-```yaml
-name: release
-
-on:
-  push:
-    tags:
-      - "v*"
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # setuptools-scm needs full history + tags
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install build
-      - run: python -m build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: pypi              # gates on manual approval
-    permissions:
-      id-token: write              # required for trusted publishing
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
-```
-
-After this is in place, the entire release flow becomes:
-
-```bash
-git tag -a v0.2.1 -m "Release 0.2.1"
-git push origin v0.2.1
-# Approve the deployment in the GitHub Actions UI. Done.
-```
-
-### Going further (optional)
-
-- **release-please** or **python-semantic-release** can read [Conventional Commits](https://www.conventionalcommits.org/) on `main` and open a "Release PR" that proposes the next tag + a CHANGELOG entry. Merging that PR creates the tag, which fires the workflow above. Fully push-button releases with no manual tag step.
+- **release-please** or **python-semantic-release** can read [Conventional Commits](https://www.conventionalcommits.org/) on `main` and open a "Release PR" that proposes the next tag + a CHANGELOG entry. Merging that PR creates the tag, which fires `publish.yml`. Fully push-button releases with no manual tag step.
 - **CHANGELOG.md** — even without release-please, keep a hand-maintained changelog. Consumers read it before upgrading.
 
 ---
