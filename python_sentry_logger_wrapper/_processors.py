@@ -11,8 +11,9 @@ STANDARD_FIELDS = {
     "trace_id",
     "span_id",
     "logger",
-    # Kept top-level so the final renderer (e.g. ConsoleRenderer) can format tracebacks
-    # natively. In JSON mode these are consumed by format_exc_info / StackInfoRenderer
+    # Kept top-level so the final renderer (e.g. ConsoleRenderer) can format
+    # exception tracebacks from exc_info and stack dumps from stack_info natively.
+    # In JSON mode these are consumed by format_exc_info / StackInfoRenderer
     # earlier in the chain, so they never reach the nesting step.
     "exc_info",
     "stack_info",

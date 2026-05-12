@@ -11,6 +11,7 @@ from sentry_sdk.integrations.logging import LoggingIntegration
 from ._processors import nest_custom_fields, rename_and_flatten_fields, remove_processors_meta_safe, add_sentry_trace_id
 
 RendererChoice = Literal["json", "console", "auto"]
+_VALID_RENDERERS = frozenset({"json", "console", "auto"})
 
 # Type hint for static analysis - import is conditional at runtime
 if TYPE_CHECKING:
@@ -92,6 +93,12 @@ def get_logger(
     #   - renderer="auto" resolves to console under a TTY, JSON when piped
     #   - format_exc_info is dropped iff resolved renderer is "console"
     #   - foreign (stdlib) logs flow through the same final renderer
+    #   - invalid renderer values raise ValueError
+    if renderer not in _VALID_RENDERERS:
+        raise ValueError(
+            f"renderer must be one of {sorted(_VALID_RENDERERS)}, got {renderer!r}"
+        )
+
     global _is_configured
 
     if not _is_configured:
