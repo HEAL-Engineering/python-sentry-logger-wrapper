@@ -49,7 +49,11 @@ git push origin v0.2.0
 
 That's it. The git tag is the release.
 
-The workflow also accepts `workflow_dispatch`, so you can manually re-run a publish from the Actions UI if a tag-push run failed and you'd rather not re-tag.
+### If a publish run fails
+
+Prefer **re-running the original tag-triggered workflow run** from the Actions UI — it's already tied to the right tag ref, so the rebuild will produce the same version.
+
+`workflow_dispatch` is available as a backup, but the job is hard-gated to only run when the ref is `refs/tags/v*`. That means dispatching the workflow with `main` (the default in the UI) will exit immediately. To dispatch manually, pick the **`vX.Y.Z` tag** from the "Use workflow from" dropdown — never a branch.
 
 ### Already configured (FYI, not setup steps)
 
