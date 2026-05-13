@@ -115,10 +115,12 @@ def get_logger(
     global _is_configured
 
     if not _is_configured:
-        # Initialize Sentry if DSN provided
-        if (
-            sentry_environment == "production" or sentry_environment == "test"
-        ) and sentry_dsn:
+        # Initialize Sentry if DSN provided.
+        # Accept both the long form ("production") and the common short form
+        # ("prod") so consumers that use either convention get the full
+        # LoggingIntegration / before_send path. Anything else with a DSN
+        # falls through to the bare init below (no integrations).
+        if sentry_environment in ("production", "prod", "test") and sentry_dsn:
 
             def before_send_log(event, hint):
                 """
