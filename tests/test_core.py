@@ -70,6 +70,21 @@ def test_dsn_without_production_uses_minimal_init(mock_sentry_sdk):
     assert kwargs["traces_sample_rate"] == 0.0
 
 
+def test_dsn_with_prod_shortform_inits_full_sentry(mock_sentry_sdk):
+    """`prod` (short form) is treated the same as `production` — full init."""
+    get_logger(
+        "svc",
+        sentry_dsn="https://k@o.ingest.sentry.io/1",
+        sentry_environment="prod",
+    )
+    assert mock_sentry_sdk["init"].call_count == 1
+    kwargs = mock_sentry_sdk["init"].call_args.kwargs
+    assert kwargs["environment"] == "prod"
+    assert kwargs["enable_logs"] is True
+    # LoggingIntegration is wired up (would be absent on the bare elif branch)
+    mock_sentry_sdk["LoggingIntegration"].assert_called_once()
+
+
 def test_sentry_logs_level_flows_to_logging_integration(mock_sentry_sdk):
     """sentry_logs_level kwarg lands on LoggingIntegration(sentry_logs_level=...)."""
     get_logger(
